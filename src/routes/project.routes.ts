@@ -1,5 +1,5 @@
 import express from "express";
-import { createProject } from "../controllers/project.controller";
+import { createProject, getAllProjects } from "../controllers/project.controller";
 
 const router = express.Router();
 
@@ -15,27 +15,47 @@ const router = express.Router();
  *         application/json:
  *           schema:
  *             type: object
+ *             required:
+ *               - title
+ *               - description
+ *               - category
+ *               - teamId
+ *               - statusId
+ *               - priorityId
  *             properties:
- *               name:
+ *               title:
  *                 type: string
  *                 example: "New Marketing Campaign"
  *               description:
  *                 type: string
  *                 example: "Launching Q4 marketing campaign"
- *               status:
+ *               category:
  *                 type: string
- *                 example: "In Progress"
- *               startDate:
+ *                 description: "Project category (e.g. Wonder, Invention, Dream, etc.)"
+ *                 example: "Wonder"
+ *               teamId:
+ *                 type: integer
+ *                 example: 4
+ *               statusId:
+ *                 type: integer
+ *                 example: 2
+ *               priorityId:
+ *                 type: integer
+ *                 example: 1
+ *               owners:
+ *                 type: array
+ *                 items:
+ *                   type: integer
+ *                 example: [3, 1]
+ *               boards:
+ *                 type: array
+ *                 items:
+ *                   type: integer
+ *                 example: [1, 3]
+ *               dueDate:
  *                 type: string
  *                 format: date
  *                 example: "2024-12-01"
- *               endDate:
- *                 type: string
- *                 format: date
- *                 example: "2025-02-28"
- *               teamId:
- *                 type: integer
- *                 example: 1
  *     responses:
  *       201:
  *         description: Project created successfully
@@ -45,5 +65,20 @@ const router = express.Router();
  *         description: Internal server error
  */
 router.post("/", createProject);
+
+/**
+ * @swagger
+ * /api/projects:
+ *   get:
+ *     summary: Get all projects with details (team, owners, boards, status, priority)
+ *     tags: [Projects]
+ *     responses:
+ *       200:
+ *         description: Successfully fetched projects
+ *       500:
+ *         description: Internal server error
+ */
+router.get("/", getAllProjects);
+
 
 export default router;
