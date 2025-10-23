@@ -1,10 +1,9 @@
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
-import { projects } from "./db/schema/project";
 import { setupSwagger } from "./swagger";
-import { db } from "./db";
 import projectRoutes from "./routes/project.routes";
+import commentRoutes from "./routes/comment.routes";
 
 dotenv.config();
 
@@ -15,7 +14,10 @@ app.use(cors());
 setupSwagger(app);
 
 app.use("/api/projects", projectRoutes);
-
+app.use("/api/comments", commentRoutes);
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Swagger Docs running at http://localhost:${PORT}/api-docs`);
+  console.log(` Server running on http://localhost:${PORT}`);
+});

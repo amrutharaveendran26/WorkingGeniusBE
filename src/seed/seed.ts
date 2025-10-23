@@ -4,6 +4,7 @@ import { employees } from "../db/schema/employees";
 import { boards } from "../db/schema/boards";
 import { projectStatus } from "../db/schema/projectStatus";
 import { projectPriority } from "../db/schema/projectPriority";
+import { projectCategory } from "../db/schema/projectCategory";
 
 async function seedData() {
   // Teams
@@ -40,14 +41,16 @@ async function seedData() {
   ]);
 
   //Boards
-  await db.insert(boards).values([
-    { name: "Marketing Team Meetings" },
-    { name: "Social Media" },
-    { name: "Product Development" },
-    { name: "Customer Support" },
-    { name: "Finance Review" },
-    { name: "Operations Planning" },
-  ]);
+  await db
+    .insert(boards)
+    .values([
+      { name: "Marketing Team Meetings" },
+      { name: "Social Media" },
+      { name: "Product Development" },
+      { name: "Customer Support" },
+      { name: "Finance Review" },
+      { name: "Operations Planning" },
+    ]);
 
   // Status
   await db.insert(projectStatus).values([
@@ -60,12 +63,27 @@ async function seedData() {
 
   // Priority
   await db.insert(projectPriority).values([
-    { name: "high", description: "Critical project requiring immediate attention" },
+    {
+      name: "high",
+      description: "Critical project requiring immediate attention",
+    },
     { name: "medium", description: "Important but not urgent" },
     { name: "low", description: "Low urgency, can be scheduled flexibly" },
   ]);
 
-  console.log("Seeded teams, employees, boards, status, and priority successfully!");
+  //projectCategory
+  await db.insert(projectCategory).values([
+    { name: "Wonder", description: "Pondering and questioning" },
+    { name: "Invention", description: "Creating and brainstorming" },
+    { name: "Discernment", description: "Evaluating and critiquing" },
+    { name: "Galvanizing", description: "Rallying and inspiring" },
+    { name: "Enablement", description: "Supporting and assisting" },
+    { name: "Tenacity", description: "Pushing to the finish" },
+  ]);
+
+  console.log(
+    "Seeded teams, employees, boards, status, and priority successfully!"
+  );
 }
 
 seedData().catch(console.error);
