@@ -6,6 +6,7 @@ import {
   integer,
   date,
   timestamp,
+  boolean
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { teams } from "./team";
@@ -24,6 +25,7 @@ export const projects = pgTable("projects", {
   statusId: integer("status_id").references(() => projectStatus.id),
   priorityId: integer("priority_id").references(() => projectPriority.id),
   dueDate: date("due_date"),
+  isDeleted: boolean("is_deleted").default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

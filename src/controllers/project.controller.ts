@@ -6,10 +6,11 @@ import { projectBoards } from "../db/schema/projectBoards";
 import { projectStatus } from "../db/schema/projectStatus";
 import { projectPriority } from "../db/schema/projectPriority";
 import { teams as teamTable } from "../db/schema/team";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { employees } from "../db/schema/employees";
 import { boards } from "../db/schema/boards";
 import { projectCategory } from "../db/schema/projectCategory";
+import { tasks } from "../db/schema";
 
 export const createProject = async (req: Request, res: Response) => {
   try {
@@ -23,6 +24,7 @@ export const createProject = async (req: Request, res: Response) => {
       owners,
       boards,
       dueDate,
+      tasks: taskList,
     } = req.body;
 
     const [newProject] = await db
@@ -56,6 +58,17 @@ export const createProject = async (req: Request, res: Response) => {
       );
     }
 
+    if (taskList?.length) {
+      await db.insert(tasks).values(
+        taskList.map((t: any) => ({
+          title: t.title,
+          dueDate: t.dueDate ?? null,
+          assignedTo: t.assignedTo ?? null,
+          projectId: newProject.id,
+        }))
+      );
+    }
+
     res.status(201).json({
       success: true,
       message: "Project created successfully",
@@ -73,32 +86,35 @@ export const createProject = async (req: Request, res: Response) => {
 
 export const getAllProjects = async (req: Request, res: Response) => {
   try {
-    const allProjects = await db.select().from(projects);
+    const allProjects = await db
+      .select()
+      .from(projects)
+      .where(eq(projects.isDeleted, false));
 
     const detailedProjects = await Promise.all(
       allProjects.map(async (project) => {
         const team =
-          project.teamId !== null && project.teamId !== undefined
+          project.teamId != null
             ? (
                 await db
                   .select({ id: teamTable.id, name: teamTable.name })
                   .from(teamTable)
-                  .where(eq(teamTable.id, project.teamId))
+                  .where(eq(teamTable.id, Number(project.teamId)))
               )[0]
             : null;
 
         const status =
-          project.statusId !== null && project.statusId !== undefined
+          project.statusId != null
             ? (
                 await db
                   .select({ id: projectStatus.id, name: projectStatus.name })
                   .from(projectStatus)
-                  .where(eq(projectStatus.id, project.statusId))
+                  .where(eq(projectStatus.id, Number(project.statusId)))
               )[0]
             : null;
 
         const priority =
-          project.priorityId !== null && project.priorityId !== undefined
+          project.priorityId != null
             ? (
                 await db
                   .select({
@@ -106,13 +122,12 @@ export const getAllProjects = async (req: Request, res: Response) => {
                     name: projectPriority.name,
                   })
                   .from(projectPriority)
-                  .where(eq(projectPriority.id, project.priorityId))
+                  .where(eq(projectPriority.id, Number(project.priorityId)))
               )[0]
             : null;
 
-        // ✅ Category
         const category =
-          project.categoryId !== null && project.categoryId !== undefined
+          project.categoryId != null
             ? (
                 await db
                   .select({
@@ -120,18 +135,18 @@ export const getAllProjects = async (req: Request, res: Response) => {
                     name: projectCategory.name,
                   })
                   .from(projectCategory)
-                  .where(eq(projectCategory.id, project.categoryId))
+                  .where(eq(projectCategory.id, Number(project.categoryId)))
               )[0]
             : null;
 
         const ownerLinks = await db
           .select()
           .from(projectOwners)
-          .where(eq(projectOwners.projectId, project.id));
+          .where(eq(projectOwners.projectId, Number(project.id)));
 
         const ownerIds = ownerLinks
           .map((o) => o.ownerId)
-          .filter((id): id is number => id !== null && id !== undefined);
+          .filter((id): id is number => id != null);
 
         const ownerDetails =
           ownerIds.length > 0
@@ -148,11 +163,11 @@ export const getAllProjects = async (req: Request, res: Response) => {
         const boardLinks = await db
           .select()
           .from(projectBoards)
-          .where(eq(projectBoards.projectId, project.id));
+          .where(eq(projectBoards.projectId, Number(project.id)));
 
         const boardIds = boardLinks
           .map((b) => b.boardId)
-          .filter((id): id is number => id !== null && id !== undefined);
+          .filter((id): id is number => id != null);
 
         const boardDetails =
           boardIds.length > 0
@@ -167,10 +182,10 @@ export const getAllProjects = async (req: Request, res: Response) => {
 
         return {
           ...project,
-          category: category ? category.name : null,
-          team: team ? team.name : null,
-          status: status ? status.name : null,
-          priority: priority ? priority.name : null,
+          category: category?.name ?? null,
+          team: team?.name ?? null,
+          status: status?.name ?? null,
+          priority: priority?.name ?? null,
           owners: ownerDetails,
           boards: boardDetails,
         };
@@ -199,55 +214,56 @@ export const getProjectById = async (req: Request, res: Response) => {
     const [project] = await db
       .select()
       .from(projects)
-      .where(eq(projects.id, Number(id)));
+      .where(and(eq(projects.id, Number(id)), eq(projects.isDeleted, false)));
 
     if (!project) {
       return res.status(404).json({
         success: false,
-        message: "Project not found",
+        message: "Project not found or inactive",
       });
     }
 
     const [team] =
-      project.teamId !== null && project.teamId !== undefined
+      project.teamId != null
         ? await db
             .select({ id: teamTable.id, name: teamTable.name })
             .from(teamTable)
-            .where(eq(teamTable.id, project.teamId))
+            .where(eq(teamTable.id, Number(project.teamId)))
         : [null];
 
     const [status] =
-      project.statusId !== null && project.statusId !== undefined
+      project.statusId != null
         ? await db
             .select({ id: projectStatus.id, name: projectStatus.name })
             .from(projectStatus)
-            .where(eq(projectStatus.id, project.statusId))
+            .where(eq(projectStatus.id, Number(project.statusId)))
         : [null];
 
     const [priority] =
-      project.priorityId !== null && project.priorityId !== undefined
+      project.priorityId != null
         ? await db
             .select({ id: projectPriority.id, name: projectPriority.name })
             .from(projectPriority)
-            .where(eq(projectPriority.id, project.priorityId))
+            .where(eq(projectPriority.id, Number(project.priorityId)))
         : [null];
 
     const [category] =
-      project.categoryId !== null && project.categoryId !== undefined
+      project.categoryId != null
         ? await db
             .select({ id: projectCategory.id, name: projectCategory.name })
             .from(projectCategory)
-            .where(eq(projectCategory.id, project.categoryId))
+            .where(eq(projectCategory.id, Number(project.categoryId)))
         : [null];
 
     const ownerLinks = await db
       .select()
       .from(projectOwners)
-      .where(eq(projectOwners.projectId, project.id));
+      .where(eq(projectOwners.projectId, Number(project.id)));
 
     const ownerIds = ownerLinks
       .map((o) => o.ownerId)
       .filter((id): id is number => typeof id === "number");
+
     const ownerDetails =
       ownerIds.length > 0
         ? await db
@@ -263,11 +279,12 @@ export const getProjectById = async (req: Request, res: Response) => {
     const boardLinks = await db
       .select()
       .from(projectBoards)
-      .where(eq(projectBoards.projectId, project.id));
+      .where(eq(projectBoards.projectId, Number(project.id)));
 
     const boardIds = boardLinks
       .map((b) => b.boardId)
       .filter((id): id is number => typeof id === "number");
+
     const boardDetails =
       boardIds.length > 0
         ? await db
@@ -281,10 +298,10 @@ export const getProjectById = async (req: Request, res: Response) => {
       message: "Project fetched successfully",
       project: {
         ...project,
-        category: category ? category.name : null,
-        team: team ? team.name : null,
-        status: status ? status.name : null,
-        priority: priority ? priority.name : null,
+        category: category?.name ?? null,
+        team: team?.name ?? null,
+        status: status?.name ?? null,
+        priority: priority?.name ?? null,
         owners: ownerDetails,
         boards: boardDetails,
       },
@@ -312,6 +329,7 @@ export const updateProject = async (req: Request, res: Response) => {
       owners,
       boards,
       dueDate,
+      tasks: taskList,
     } = req.body;
 
     const [existingProject] = await db
@@ -340,33 +358,43 @@ export const updateProject = async (req: Request, res: Response) => {
       .where(eq(projects.id, Number(id)))
       .returning();
 
-    if (owners && owners.length > 0) {
+    if (owners?.length) {
       await db
         .delete(projectOwners)
         .where(eq(projectOwners.projectId, Number(id)));
-      await db.insert(projectOwners).values(
-        owners.map((ownerId: number) => ({
-          projectId: Number(id),
-          ownerId,
-        }))
-      );
+      await db
+        .insert(projectOwners)
+        .values(
+          owners.map((ownerId: number) => ({ projectId: Number(id), ownerId }))
+        );
     }
 
-    if (boards && boards.length > 0) {
+    if (boards?.length) {
       await db
         .delete(projectBoards)
         .where(eq(projectBoards.projectId, Number(id)));
-      await db.insert(projectBoards).values(
-        boards.map((boardId: number) => ({
+      await db
+        .insert(projectBoards)
+        .values(
+          boards.map((boardId: number) => ({ projectId: Number(id), boardId }))
+        );
+    }
+
+    if (taskList?.length) {
+      await db.delete(tasks).where(eq(tasks.projectId, Number(id)));
+      await db.insert(tasks).values(
+        taskList.map((t: any) => ({
+          title: t.title,
+          dueDate: t.dueDate ?? null,
+          assignedTo: t.assignedTo ?? null,
           projectId: Number(id),
-          boardId,
         }))
       );
     }
 
     res.status(200).json({
       success: true,
-      message: "Project updated successfully",
+      message: "Project and tasks updated successfully",
       project: updatedProject,
     });
   } catch (error) {
@@ -374,6 +402,54 @@ export const updateProject = async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       message: "Failed to update project",
+      details: error,
+    });
+  }
+};
+
+export const deleteProject = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    await db
+      .update(projects)
+      .set({ isDeleted: true })
+      .where(eq(projects.id, Number(id)));
+
+    await db
+      .update(tasks)
+      .set({ isDeleted: true })
+      .where(eq(tasks.projectId, Number(id)));
+
+    res
+      .status(200)
+      .json({ success: true, message: "Project soft-deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting project:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to delete project",
+      details: error,
+    });
+  }
+};
+
+export const deleteTask = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    await db
+      .update(tasks)
+      .set({ isDeleted: true })
+      .where(eq(tasks.id, Number(id)));
+
+    res
+      .status(200)
+      .json({ success: true, message: "Task soft-deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting task:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to delete task",
       details: error,
     });
   }
