@@ -180,6 +180,50 @@ export const getAllProjects = async (req: Request, res: Response) => {
                 .where(inArray(boards.id, boardIds))
             : [];
 
+        // ✅ Fetch subtasks for this project
+        const subtaskList = await db
+          .select({
+            id: tasks.id,
+            title: tasks.title,
+            dueDate: tasks.dueDate,
+            assignedTo: tasks.assignedTo,
+            isDeleted: tasks.isDeleted,
+          })
+          .from(tasks)
+          .where(
+            and(eq(tasks.projectId, project.id), eq(tasks.isDeleted, false))
+          );
+
+        // ✅ Fetch employee names for subtasks
+        const assignedIds = subtaskList
+          .map((s) => s.assignedTo)
+          .filter((id): id is number => id != null);
+
+        let assignedUsers: Record<number, string> = {};
+        if (assignedIds.length > 0) {
+          const employeesFound = await db
+            .select({
+              id: employees.id,
+              name: employees.name,
+            })
+            .from(employees)
+            .where(inArray(employees.id, assignedIds));
+
+          employeesFound.forEach((emp) => {
+            assignedUsers[emp.id] = emp.name;
+          });
+        }
+
+        // ✅ Map subtasks with employee names
+        const subtasksWithDetails = subtaskList.map((s) => ({
+          id: s.id,
+          title: s.title,
+          dueDate: s.dueDate,
+          assignedTo: s.assignedTo,
+          assignee: assignedUsers[s.assignedTo ?? 0] ?? "Unassigned",
+          completed: false, // you can adjust if you have a 'completed' column
+        }));
+
         return {
           ...project,
           category: category?.name ?? null,
@@ -188,6 +232,7 @@ export const getAllProjects = async (req: Request, res: Response) => {
           priority: priority?.name ?? null,
           owners: ownerDetails,
           boards: boardDetails,
+          subtasks: subtasksWithDetails, // ✅ Add subtasks in response
         };
       })
     );
@@ -293,6 +338,42 @@ export const getProjectById = async (req: Request, res: Response) => {
             .where(inArray(boards.id, boardIds))
         : [];
 
+    // ✅ Fetch subtasks
+    const subtaskList = await db
+      .select({
+        id: tasks.id,
+        title: tasks.title,
+        dueDate: tasks.dueDate,
+        assignedTo: tasks.assignedTo,
+        isDeleted: tasks.isDeleted,
+      })
+      .from(tasks)
+      .where(and(eq(tasks.projectId, project.id), eq(tasks.isDeleted, false)));
+
+    const assignedIds = subtaskList
+      .map((s) => s.assignedTo)
+      .filter((id): id is number => id != null);
+    let assignedUsers: Record<number, string> = {};
+    if (assignedIds.length > 0) {
+      const employeesFound = await db
+        .select({ id: employees.id, name: employees.name })
+        .from(employees)
+        .where(inArray(employees.id, assignedIds));
+
+      employeesFound.forEach((emp) => {
+        assignedUsers[emp.id] = emp.name;
+      });
+    }
+
+    const subtasksWithDetails = subtaskList.map((s) => ({
+      id: s.id,
+      title: s.title,
+      dueDate: s.dueDate,
+      assignedTo: s.assignedTo,
+      assignee: assignedUsers[s.assignedTo ?? 0] ?? "Unassigned",
+      completed: false,
+    }));
+
     res.status(200).json({
       success: true,
       message: "Project fetched successfully",
@@ -304,6 +385,7 @@ export const getProjectById = async (req: Request, res: Response) => {
         priority: priority?.name ?? null,
         owners: ownerDetails,
         boards: boardDetails,
+        subtasks: subtasksWithDetails,
       },
     });
   } catch (error) {
@@ -437,10 +519,31 @@ export const deleteProject = async (req: Request, res: Response) => {
 export const deleteTask = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    const taskId = Number(id);
+
+    if (isNaN(taskId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid task ID format. Must be a number.",
+      });
+    }
+
+    const [taskExists] = await db
+      .select({ id: tasks.id })
+      .from(tasks)
+      .where(eq(tasks.id, taskId));
+
+    if (!taskExists) {
+      return res.status(404).json({
+        success: false,
+        message: "Task not found",
+      });
+    }
+
     await db
       .update(tasks)
       .set({ isDeleted: true })
-      .where(eq(tasks.id, Number(id)));
+      .where(eq(tasks.id, taskId));
 
     res
       .status(200)
@@ -454,3 +557,5 @@ export const deleteTask = async (req: Request, res: Response) => {
     });
   }
 };
+
+

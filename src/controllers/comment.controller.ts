@@ -44,7 +44,7 @@ export const addProjectComment = async (req: Request, res: Response) => {
     return res.status(201).json({
       success: true,
       message: "Comment added successfully",
-      comment: newComment,
+      data: newComment,
     });
   } catch (err) {
     console.error("Error in addProjectComment:", err);
@@ -72,7 +72,8 @@ export const getCommentsByProject = async (req: Request, res: Response) => {
 
     return res.status(200).json({
       success: true,
-      comments: commentRows,
+      message: "Comments fetched successfully",
+      data: commentRows,
     });
   } catch (err) {
     console.error("Error fetching comments:", err);
