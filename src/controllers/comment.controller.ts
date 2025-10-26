@@ -1,127 +1,83 @@
+// src/controllers/comment.controller.ts
 import { Request, Response } from "express";
 import { db } from "../db";
 import { comments } from "../db/schema/comment";
-import { employees } from "../db/schema/employees";
-import { tasks } from "../db/schema/task";
-import { eq, inArray } from "drizzle-orm";
+import { projects } from "../db/schema/project";
+import { eq } from "drizzle-orm";
 
-
-export const addComment = async (req: Request, res: Response) => {
+export const addProjectComment = async (req: Request, res: Response) => {
   try {
-    const { taskId, userId, content } = req.body;
+    const { projectId, content, userName } = req.body;
 
-    if (!taskId || typeof taskId !== "number") {
-      return res.status(400).json({
-        success: false,
-        message: "taskId is required and must be a number",
-      });
-    }
-    if (!userId || typeof userId !== "number") {
-      return res.status(400).json({
-        success: false,
-        message: "userId is required and must be a number",
-      });
-    }
-    if (!content || typeof content !== "string" || content.trim() === "") {
+    if (!projectId || typeof projectId !== "number") {
       return res
         .status(400)
-        .json({ success: false, message: "content is required" });
+        .json({ success: false, message: "projectId must be a number" });
     }
 
-    const [foundTask] = await db
-      .select()
-      .from(tasks)
-      .where(eq(tasks.id, taskId));
-    if (!foundTask) {
+    if (!content || typeof content !== "string" || !content.trim()) {
       return res
-        .status(404)
-        .json({ success: false, message: "Task not found" });
+        .status(400)
+        .json({ success: false, message: "Comment content is required" });
     }
 
-    const [foundUser] = await db
+    const [project] = await db
       .select()
-      .from(employees)
-      .where(eq(employees.id, userId));
-    if (!foundUser) {
+      .from(projects)
+      .where(eq(projects.id, projectId));
+
+    if (!project) {
       return res
         .status(404)
-        .json({ success: false, message: "User (employee) not found" });
+        .json({ success: false, message: "Project not found" });
     }
 
     const [newComment] = await db
       .insert(comments)
       .values({
-        taskId,
-        userId,
+        projectId,
         content: content.trim(),
+        userName: userName || "You",
       })
       .returning();
 
-    return res.status(201).json({ success: true, comment: newComment });
+    return res.status(201).json({
+      success: true,
+      message: "Comment added successfully",
+      comment: newComment,
+    });
   } catch (err) {
-    console.error("Error in createComment:", err);
+    console.error("Error in addProjectComment:", err);
     return res.status(500).json({
       success: false,
-      message: "Failed to create comment",
-      details: err,
+      message: "Failed to add comment",
+      error: err,
     });
   }
 };
 
-
-export const getCommentsByTask = async (req: Request, res: Response) => {
+export const getCommentsByProject = async (req: Request, res: Response) => {
   try {
-    const taskId = Number(req.params.taskId);
-    if (!taskId) {
+    const projectId = Number(req.params.projectId);
+    if (!projectId) {
       return res
         .status(400)
-        .json({ success: false, message: "Invalid taskId" });
+        .json({ success: false, message: "Invalid projectId" });
     }
 
     const commentRows = await db
       .select()
       .from(comments)
-      .where(eq(comments.taskId, taskId));
+      .where(eq(comments.projectId, projectId));
 
-    const userIds = Array.from(
-      new Set(
-        commentRows.map((c) => c.userId).filter((id): id is number => !!id)
-      )
-    );
-    const users =
-      userIds.length > 0
-        ? await db
-            .select({
-              id: employees.id,
-              name: employees.name,
-              email: employees.email,
-            })
-            .from(employees)
-            .where(inArray(employees.id, userIds))
-        : [];
-
-    const userMap = new Map<
-      number,
-      { id: number; name: string; email: string | null }
-    >();
-    users.forEach((u) => userMap.set(u.id, u));
-
-    const commentsWithUser = commentRows.map((c) => ({
-      id: c.id,
-      taskId: c.taskId,
-      userId: c.userId,
-      content: c.content,
-      createdAt: c.createdAt,
-      user: c.userId ? userMap.get(c.userId) ?? null : null,
-    }));
-
-    return res.status(200).json({ success: true, comments: commentsWithUser });
-  } catch (err) {
-    console.error("Error in getCommentsForTask:", err);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch comments",
-      details: err,
+    return res.status(200).json({
+      success: true,
+      comments: commentRows,
     });
+  } catch (err) {
+    console.error("Error fetching comments:", err);
+    return res
+      .status(500)
+      .json({ success: false, message: "Failed to fetch comments" });
   }
 };

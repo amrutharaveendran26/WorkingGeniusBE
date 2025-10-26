@@ -1,10 +1,11 @@
-import { pgTable, serial, text, integer, timestamp } from "drizzle-orm/pg-core"
-import { tasks } from "./task"
+// src/db/schema/comment.ts
+import { pgTable, serial, text, integer, timestamp } from "drizzle-orm/pg-core";
+import { projects } from "./project";
 
 export const comments = pgTable("comments", {
   id: serial("id").primaryKey(),
-  taskId: integer("task_id").references(() => tasks.id),
-  userId: integer("user_id"),
+  projectId: integer("project_id").references(() => projects.id), 
+  userName: text("user_name").default("Guest"), 
   content: text("content").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
-})
+});

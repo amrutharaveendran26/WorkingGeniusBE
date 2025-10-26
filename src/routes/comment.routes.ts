@@ -1,13 +1,13 @@
 import express from "express";
-import { addComment, getCommentsByTask } from "../controllers/comment.controller";
+import { addProjectComment, getCommentsByProject } from "../controllers/comment.controller";
 
 const router = express.Router();
 
 /**
  * @swagger
- * /api/comments:
+ * /api/comments/project:
  *   post:
- *     summary: Add a new comment to a task
+ *     summary: Add a new comment to a project (no auth required)
  *     tags: [Comments]
  *     requestBody:
  *       required: true
@@ -16,19 +16,18 @@ const router = express.Router();
  *           schema:
  *             type: object
  *             required:
- *               - taskId
- *               - userId
+ *               - projectId
  *               - content
  *             properties:
- *               taskId:
+ *               projectId:
  *                 type: integer
- *                 example: 2
- *               userId:
- *                 type: integer
- *                 example: 3
+ *                 example: 5
+ *               userName:
+ *                 type: string
+ *                 example: "You"
  *               content:
  *                 type: string
- *                 example: "This needs review before submission."
+ *                 example: "Let's finalize the deployment checklist by EOD."
  *     responses:
  *       201:
  *         description: Comment added successfully
@@ -37,27 +36,27 @@ const router = express.Router();
  *       500:
  *         description: Internal server error
  */
-router.post("/", addComment);
+router.post("/project", addProjectComment);
 
 /**
  * @swagger
- * /api/comments/task/{taskId}:
+ * /api/comments/project/{projectId}:
  *   get:
- *     summary: Get all comments for a specific task
+ *     summary: Get all comments for a specific project
  *     tags: [Comments]
  *     parameters:
  *       - in: path
- *         name: taskId
+ *         name: projectId
  *         required: true
  *         schema:
  *           type: integer
- *         description: ID of the task to fetch comments for
+ *         description: ID of the project to fetch comments for
  *     responses:
  *       200:
  *         description: Comments fetched successfully
  *       404:
- *         description: Task not found or has no comments
+ *         description: Project not found or has no comments
  */
-router.get("/task/:taskId", getCommentsByTask);
+router.get("/project/:projectId", getCommentsByProject);
 
 export default router;
