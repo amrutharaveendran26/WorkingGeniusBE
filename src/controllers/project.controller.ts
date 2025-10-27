@@ -180,7 +180,6 @@ export const getAllProjects = async (req: Request, res: Response) => {
                 .where(inArray(boards.id, boardIds))
             : [];
 
-        // ✅ Fetch subtasks for this project
         const subtaskList = await db
           .select({
             id: tasks.id,
@@ -194,7 +193,6 @@ export const getAllProjects = async (req: Request, res: Response) => {
             and(eq(tasks.projectId, project.id), eq(tasks.isDeleted, false))
           );
 
-        // ✅ Fetch employee names for subtasks
         const assignedIds = subtaskList
           .map((s) => s.assignedTo)
           .filter((id): id is number => id != null);
@@ -214,14 +212,13 @@ export const getAllProjects = async (req: Request, res: Response) => {
           });
         }
 
-        // ✅ Map subtasks with employee names
         const subtasksWithDetails = subtaskList.map((s) => ({
           id: s.id,
           title: s.title,
           dueDate: s.dueDate,
           assignedTo: s.assignedTo,
           assignee: assignedUsers[s.assignedTo ?? 0] ?? "Unassigned",
-          completed: false, // you can adjust if you have a 'completed' column
+          completed: false, 
         }));
 
         return {
@@ -232,7 +229,7 @@ export const getAllProjects = async (req: Request, res: Response) => {
           priority: priority?.name ?? null,
           owners: ownerDetails,
           boards: boardDetails,
-          subtasks: subtasksWithDetails, // ✅ Add subtasks in response
+          subtasks: subtasksWithDetails, 
         };
       })
     );

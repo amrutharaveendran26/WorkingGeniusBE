@@ -6,7 +6,7 @@ const pool = new Pool({
   user: "postgres",
   host: "localhost",
   database: "techmission",
-  password: "Amrutha26", // <-- hardcoded to test
+  password: "Amrutha26", 
   port: 5432,
 });
 
