@@ -25,6 +25,6 @@ const router = express.Router();
  *       500:
  *         description: Server error
  */
-router.get("/", getMasterData);
+router.get("/all", getMasterData);
 
 export default router;

@@ -6,7 +6,7 @@ import { projectBoards } from "../db/schema/projectBoards";
 import { projectStatus } from "../db/schema/projectStatus";
 import { projectPriority } from "../db/schema/projectPriority";
 import { teams as teamTable } from "../db/schema/team";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, count } from "drizzle-orm";
 import { employees } from "../db/schema/employees";
 import { boards } from "../db/schema/boards";
 import { projectCategory } from "../db/schema/projectCategory";
@@ -84,159 +84,187 @@ export const createProject = async (req: Request, res: Response) => {
   }
 };
 
+const groupBy = <T>(array: T[], key: keyof T): Record<number, T[]> => {
+  return array.reduce((acc, item: any) => {
+    const groupKey = item[key];
+    if (groupKey == null) return acc;
+    if (!acc[groupKey]) acc[groupKey] = [];
+    acc[groupKey].push(item);
+    return acc;
+  }, {} as Record<number, T[]>);
+};
+
 export const getAllProjects = async (req: Request, res: Response) => {
   try {
-    const allProjects = await db
-      .select()
+    const { page = 1, limit = 10 } = req.query;
+    const pageNum = Number(page);
+    const limitNum = Number(limit);
+    const offset = (pageNum - 1) * limitNum;
+
+    const projectList = await db
+      .select({
+        id: projects.id,
+        title: projects.title,
+        description: projects.description,
+        dueDate: projects.dueDate,
+        teamId: projects.teamId,
+        statusId: projects.statusId,
+        priorityId: projects.priorityId,
+        categoryId: projects.categoryId,
+        team: teamTable.name,
+        status: projectStatus.name,
+        priority: projectPriority.name,
+        category: projectCategory.name,
+      })
       .from(projects)
-      .where(eq(projects.isDeleted, false));
+      .leftJoin(teamTable, eq(projects.teamId, teamTable.id))
+      .leftJoin(projectStatus, eq(projects.statusId, projectStatus.id))
+      .leftJoin(projectPriority, eq(projects.priorityId, projectPriority.id))
+      .leftJoin(projectCategory, eq(projects.categoryId, projectCategory.id))
+      .where(eq(projects.isDeleted, false))
+      .limit(limitNum)
+      .offset(offset);
 
-    const detailedProjects = await Promise.all(
-      allProjects.map(async (project) => {
-        const team =
-          project.teamId != null
-            ? (
-                await db
-                  .select({ id: teamTable.id, name: teamTable.name })
-                  .from(teamTable)
-                  .where(eq(teamTable.id, Number(project.teamId)))
-              )[0]
-            : null;
+    if (!projectList.length) {
+      return res.status(200).json({
+        success: true,
+        message: "No projects found",
+        projects: [],
+        total: 0,
+        page: pageNum,
+      });
+    }
 
-        const status =
-          project.statusId != null
-            ? (
-                await db
-                  .select({ id: projectStatus.id, name: projectStatus.name })
-                  .from(projectStatus)
-                  .where(eq(projectStatus.id, Number(project.statusId)))
-              )[0]
-            : null;
+    const projectIds = projectList.map((p) => p.id);
 
-        const priority =
-          project.priorityId != null
-            ? (
-                await db
-                  .select({
-                    id: projectPriority.id,
-                    name: projectPriority.name,
-                  })
-                  .from(projectPriority)
-                  .where(eq(projectPriority.id, Number(project.priorityId)))
-              )[0]
-            : null;
+    const [ownerLinks, boardLinks, taskList] = await Promise.all([
+      db
+        .select()
+        .from(projectOwners)
+        .where(inArray(projectOwners.projectId, projectIds)),
+      db
+        .select()
+        .from(projectBoards)
+        .where(inArray(projectBoards.projectId, projectIds)),
+      db
+        .select({
+          id: tasks.id,
+          title: tasks.title,
+          dueDate: tasks.dueDate,
+          assignedTo: tasks.assignedTo,
+          projectId: tasks.projectId,
+        })
+        .from(tasks)
+        .where(
+          and(inArray(tasks.projectId, projectIds), eq(tasks.isDeleted, false))
+        ),
+    ]);
 
-        const category =
-          project.categoryId != null
-            ? (
-                await db
-                  .select({
-                    id: projectCategory.id,
-                    name: projectCategory.name,
-                  })
-                  .from(projectCategory)
-                  .where(eq(projectCategory.id, Number(project.categoryId)))
-              )[0]
-            : null;
+    const uniqueEmployeeIds = Array.from(
+      new Set(
+        [
+          ...ownerLinks.map((o) => o.ownerId),
+          ...taskList.map((t) => t.assignedTo),
+        ].filter((id): id is number => id != null)
+      )
+    );
 
-        const ownerLinks = await db
-          .select()
-          .from(projectOwners)
-          .where(eq(projectOwners.projectId, Number(project.id)));
-
-        const ownerIds = ownerLinks
-          .map((o) => o.ownerId)
-          .filter((id): id is number => id != null);
-
-        const ownerDetails =
-          ownerIds.length > 0
-            ? await db
-                .select({
-                  id: employees.id,
-                  name: employees.name,
-                  email: employees.email,
-                })
-                .from(employees)
-                .where(inArray(employees.id, ownerIds))
-            : [];
-
-        const boardLinks = await db
-          .select()
-          .from(projectBoards)
-          .where(eq(projectBoards.projectId, Number(project.id)));
-
-        const boardIds = boardLinks
-          .map((b) => b.boardId)
-          .filter((id): id is number => id != null);
-
-        const boardDetails =
-          boardIds.length > 0
-            ? await db
-                .select({
-                  id: boards.id,
-                  name: boards.name,
-                })
-                .from(boards)
-                .where(inArray(boards.id, boardIds))
-            : [];
-
-        const subtaskList = await db
-          .select({
-            id: tasks.id,
-            title: tasks.title,
-            dueDate: tasks.dueDate,
-            assignedTo: tasks.assignedTo,
-            isDeleted: tasks.isDeleted,
-          })
-          .from(tasks)
-          .where(
-            and(eq(tasks.projectId, project.id), eq(tasks.isDeleted, false))
-          );
-
-        const assignedIds = subtaskList
-          .map((s) => s.assignedTo)
-          .filter((id): id is number => id != null);
-
-        let assignedUsers: Record<number, string> = {};
-        if (assignedIds.length > 0) {
-          const employeesFound = await db
+    const employeesList =
+      uniqueEmployeeIds.length > 0
+        ? await db
             .select({
               id: employees.id,
               name: employees.name,
+              email: employees.email,
             })
             .from(employees)
-            .where(inArray(employees.id, assignedIds));
+            .where(inArray(employees.id, uniqueEmployeeIds))
+        : [];
 
-          employeesFound.forEach((emp) => {
-            assignedUsers[emp.id] = emp.name;
-          });
-        }
-
-        const subtasksWithDetails = subtaskList.map((s) => ({
-          id: s.id,
-          title: s.title,
-          dueDate: s.dueDate,
-          assignedTo: s.assignedTo,
-          assignee: assignedUsers[s.assignedTo ?? 0] ?? "Unassigned",
-          completed: false, 
-        }));
-
-        return {
-          ...project,
-          category: category?.name ?? null,
-          team: team?.name ?? null,
-          status: status?.name ?? null,
-          priority: priority?.name ?? null,
-          owners: ownerDetails,
-          boards: boardDetails,
-          subtasks: subtasksWithDetails, 
-        };
-      })
+    const uniqueBoardIds = Array.from(
+      new Set(
+        boardLinks
+          .map((b) => b.boardId)
+          .filter((id): id is number => id != null)
+      )
     );
+
+    const boardsList =
+      uniqueBoardIds.length > 0
+        ? await db
+            .select({ id: boards.id, name: boards.name })
+            .from(boards)
+            .where(inArray(boards.id, uniqueBoardIds))
+        : [];
+
+    const ownersByProject = groupBy(ownerLinks, "projectId");
+    const boardsByProject = groupBy(boardLinks, "projectId");
+    const tasksByProject = groupBy(taskList, "projectId");
+
+    const employeeMap: Record<
+      number,
+      { id: number; name: string; email: string | null }
+    > = {};
+
+    employeesList.forEach((emp) => {
+      if (emp.id != null) {
+        employeeMap[emp.id] = {
+          id: emp.id,
+          name: emp.name,
+          email: emp.email ?? null, 
+        };
+      }
+    });
+
+    const boardMap: Record<number, { id: number; name: string | null }> = {};
+
+    boardsList.forEach((b) => {
+      if (b.id != null) {
+        boardMap[b.id] = { id: b.id, name: b.name ?? null };
+      }
+    });
+
+    const detailedProjects = projectList.map((project) => {
+      const owners =
+        ownersByProject[project.id]
+          ?.filter((o) => o.ownerId != null)
+          .map((o) => employeeMap[o.ownerId!]) ?? [];
+
+      const boardDetails =
+        boardsByProject[project.id]
+          ?.filter((b) => b.boardId != null)
+          .map((b) => boardMap[b.boardId!]) ?? [];
+
+      const subtasks =
+        tasksByProject[project.id]?.map((t) => ({
+          id: t.id,
+          title: t.title,
+          dueDate: t.dueDate,
+          assignedTo: t.assignedTo,
+          assignee: t.assignedTo
+            ? employeeMap[t.assignedTo]?.name ?? "Unassigned"
+            : "Unassigned",
+        })) ?? [];
+
+      return {
+        ...project,
+        owners,
+        boards: boardDetails,
+        subtasks,
+      };
+    });
+
+    const [{ total }] = await db
+      .select({ total: count(projects.id) })
+      .from(projects)
+      .where(eq(projects.isDeleted, false));
 
     res.status(200).json({
       success: true,
       message: "Projects fetched successfully",
+      page: pageNum,
+      limit: limitNum,
+      total: Number(total),
       projects: detailedProjects,
     });
   } catch (error) {
@@ -244,7 +272,7 @@ export const getAllProjects = async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       message: "Failed to fetch projects",
-      details: error,
+      details: (error as Error).message,
     });
   }
 };
@@ -537,10 +565,7 @@ export const deleteTask = async (req: Request, res: Response) => {
       });
     }
 
-    await db
-      .update(tasks)
-      .set({ isDeleted: true })
-      .where(eq(tasks.id, taskId));
+    await db.update(tasks).set({ isDeleted: true }).where(eq(tasks.id, taskId));
 
     res
       .status(200)
@@ -554,5 +579,3 @@ export const deleteTask = async (req: Request, res: Response) => {
     });
   }
 };
-
-
